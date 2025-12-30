@@ -1,0 +1,17 @@
+# Blender backup / autosave
+*.blend1
+*.blend2
+*.blend@
+*.blend~
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+.venv/
+venv/
