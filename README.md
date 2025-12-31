@@ -17,3 +17,18 @@ Small Blender playground repo for lattice-based deformation tools.
 
 Notes:
 - These scripts use `bpy`, so they must be run inside Blender.
+
+## Troubleshooting
+
+### "File written by newer Blender binary" / read-only state
+
+If Blender opens `assets/Wall_Test.blend` with a warning like "File written by newer Blender binary", it may switch into a read-only state.
+In that mode, Python UI class registration can fail with errors like:
+
+- `register_class(...): can't run in readonly state ...`
+
+Fix: open the scene with a Blender version that is the same or newer than the version that saved the file, then run the scripts again.
+
+### Running the correct script version
+
+If your `.blend` contains embedded Text blocks with older script copies, make sure you open and run the files from the `scripts/` folder.
