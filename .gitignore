@@ -1,4 +1,5 @@
 # Blender backup / autosave
+*.blend
 *.blend1
 *.blend2
 *.blend@
