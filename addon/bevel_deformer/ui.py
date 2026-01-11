@@ -7,7 +7,7 @@ class BD_PT_panel(Panel):
     bl_idname = "BD_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Bevel'
+    bl_category = 'Bevel_Deform'
 
     def draw(self, context):
         layout = self.layout
@@ -23,7 +23,9 @@ class BD_PT_panel(Panel):
         col.prop(lattice_settings, "interpolation")
         col.operator("bd.create_lattice_multi")
         col.operator("bd.apply_lattice_interpolation")
-        col.operator("bd.delete_lattice")
+        row = col.row(align=True)
+        row.operator("bd.apply_lattice")
+        row.operator("bd.delete_lattice")
 
         layout.separator()
 
@@ -33,6 +35,11 @@ class BD_PT_panel(Panel):
         col.prop(deform_settings, "reset_to_uniform")
         col.prop(deform_settings, "shift_factor")
         col.prop(deform_settings, "scale_factor")
+        col.separator(factor=0.5)
+        col.label(text="Dimensions")
+        col.prop(deform_settings, "offset_x")
+        col.prop(deform_settings, "offset_y")
+        col.prop(deform_settings, "offset_z")
         col.operator("bd.deform_selected_lattices")
         col.operator("bd.reset_selected_lattices")
 

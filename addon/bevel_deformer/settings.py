@@ -57,21 +57,45 @@ class BD_DeformSettings(PropertyGroup):
     live_preview: BoolProperty(
         name="Live Preview",
         description="Automatically apply deform when changing sliders",
-        default=False,
+        default=True,
     )
     scale_factor: FloatProperty(
         name="Scale Factor",
         description="Multiplier applied only on axes where shift was performed",
-        default=0.95,
+        default=1.0,
         min=0.0,
         soft_max=2.0,
         update=_schedule_live_deform_update,
     )
+    offset_x: FloatProperty(
+        name="Offset X",
+        description="Additive offset along lattice X with a ramp (first 2 rows fixed, last 2 full)",
+        default=0.0,
+        soft_min=-5.0,
+        soft_max=5.0,
+        update=_schedule_live_deform_update,
+    )
+    offset_y: FloatProperty(
+        name="Offset Y",
+        description="Additive offset along lattice Y with a ramp (first 2 rows fixed, last 2 full)",
+        default=0.0,
+        soft_min=-5.0,
+        soft_max=5.0,
+        update=_schedule_live_deform_update,
+    )
+    offset_z: FloatProperty(
+        name="Offset Z",
+        description="Additive offset along lattice Z with a ramp (first 2 rows fixed, last 2 full)",
+        default=0.0,
+        soft_min=-5.0,
+        soft_max=5.0,
+        update=_schedule_live_deform_update,
+    )
     shift_factor: FloatProperty(
         name="Shift Factor",
-        description="0.0 = no shift, 1.0 = collapse into boundary row",
-        default=0.5,
-        min=0.0,
+        description="-1.0..1.0 shift strength (0.0 = no shift, 1.0 = collapse into boundary row)",
+        default=0.0,
+        min=-1.0,
         max=1.0,
         update=_schedule_live_deform_update,
     )

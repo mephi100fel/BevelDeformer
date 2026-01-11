@@ -3,7 +3,7 @@ bl_info = {
     "author": "",
     "version": (0, 1, 2),
     "blender": (4, 0, 0),
-    "location": "View3D > Sidebar > Bevel",
+    "location": "View3D > Sidebar > Bevel_Deform",
     "description": "Create lattices for selected meshes and apply lattice deform helpers.",
     "category": "Object",
     "icon": "MOD_LATTICE",
@@ -85,7 +85,7 @@ class BD_AddonPreferences(AddonPreferences):
             layout.label(text="Bevel Deformer")
 
         layout.separator()
-        layout.label(text="UI settings are in View3D > Sidebar > Bevel")
+        layout.label(text="UI settings are in View3D > Sidebar > Bevel_Deform")
 
         layout.separator()
         layout.label(text="Updates")

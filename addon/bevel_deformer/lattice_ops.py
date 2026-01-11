@@ -65,6 +65,29 @@ def _delete_lattice_object(lat_obj: bpy.types.Object) -> bool:
     return True
 
 
+def _iter_lattice_modifiers(
+    mesh_obj: bpy.types.Object, *, lattice_obj: bpy.types.Object | None = None
+):
+    for mod in list(mesh_obj.modifiers):
+        if mod.type != 'LATTICE':
+            continue
+        if lattice_obj is not None and mod.object != lattice_obj:
+            continue
+        yield mod
+
+
+def _find_meshes_using_lattice(lat_obj: bpy.types.Object) -> list[bpy.types.Object]:
+    meshes: list[bpy.types.Object] = []
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH':
+            continue
+        for mod in obj.modifiers:
+            if mod.type == 'LATTICE' and mod.object == lat_obj:
+                meshes.append(obj)
+                break
+    return meshes
+
+
 def create_lattice_multi(
     targets: list[bpy.types.Object],
     *,
@@ -326,10 +349,132 @@ class BD_OT_apply_lattice_interpolation(Operator):
         return {'FINISHED'}
 
 
+class BD_OT_apply_lattice(Operator):
+    bl_idname = "bd.apply_lattice"
+    bl_label = "Apply Lattice"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        selected = list(context.selected_objects)
+        if not selected:
+            self.report({'WARNING'}, "No objects selected")
+            return {'CANCELLED'}
+
+        prev_selected = list(context.selected_objects)
+        prev_active = context.view_layer.objects.active
+
+        try:
+            if context.mode != 'OBJECT':
+                try:
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                except Exception:
+                    pass
+
+            meshes: set[bpy.types.Object] = set()
+            lattices: set[bpy.types.Object] = set()
+
+            for obj in selected:
+                if obj.type == 'MESH':
+                    meshes.add(obj)
+                    for mod in obj.modifiers:
+                        if mod.type == 'LATTICE' and mod.object is not None:
+                            lattices.add(mod.object)
+                elif obj.type == 'LATTICE':
+                    lattices.add(obj)
+
+            if lattices and not meshes:
+                for lat in list(lattices):
+                    for m in _find_meshes_using_lattice(lat):
+                        meshes.add(m)
+
+            if not meshes:
+                self.report({'WARNING'}, "No mesh objects found to apply")
+                return {'CANCELLED'}
+
+            applied_mods = 0
+            for mesh_obj in meshes:
+                if mesh_obj.type != 'MESH':
+                    continue
+
+                try:
+                    for obj in context.selected_objects:
+                        obj.select_set(False)
+                except Exception:
+                    pass
+
+                try:
+                    mesh_obj.select_set(True)
+                    context.view_layer.objects.active = mesh_obj
+                except Exception:
+                    continue
+
+                for mod in list(_iter_lattice_modifiers(mesh_obj)):
+                    lat_obj = mod.object
+                    if lat_obj is None:
+                        continue
+
+                    if lattices and lat_obj not in lattices:
+                        continue
+
+                    try:
+                        bpy.ops.object.modifier_apply(modifier=mod.name)
+                        applied_mods += 1
+                    except Exception as e:
+                        print(
+                            "BevelDeformer: failed to apply modifier "
+                            f"{mod.name} on {getattr(mesh_obj, 'name', '<unknown>')}: {e}"
+                        )
+
+            deleted_lattices = 0
+            skipped_lattices = 0
+            for lat_obj in list(lattices):
+                try:
+                    still_used = False
+                    for m in _find_meshes_using_lattice(lat_obj):
+                        still_used = True
+                        break
+
+                    if still_used:
+                        skipped_lattices += 1
+                        continue
+
+                    if _delete_lattice_object(lat_obj):
+                        deleted_lattices += 1
+                except Exception as e:
+                    print(
+                        "BevelDeformer: failed to delete lattice "
+                        f"{getattr(lat_obj, 'name', '<unknown>')}: {e}"
+                    )
+
+            self.report(
+                {'INFO'},
+                f"Applied {applied_mods} modifier(s), deleted {deleted_lattices} lattice(s)"
+                + (f", skipped {skipped_lattices} (still used)" if skipped_lattices else ""),
+            )
+            return {'FINISHED'}
+
+        finally:
+            try:
+                for obj in context.selected_objects:
+                    obj.select_set(False)
+            except Exception:
+                pass
+            for obj in prev_selected:
+                try:
+                    obj.select_set(True)
+                except Exception:
+                    pass
+            try:
+                context.view_layer.objects.active = prev_active
+            except Exception:
+                pass
+
+
 _classes = (
     BD_OT_create_lattice_multi,
     BD_OT_delete_lattice,
     BD_OT_apply_lattice_interpolation,
+    BD_OT_apply_lattice,
 )
 
 
