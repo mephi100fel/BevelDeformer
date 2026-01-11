@@ -22,6 +22,7 @@ class BD_PT_panel(Panel):
         col.prop(lattice_settings, "locked_axis_resolution")
         col.prop(lattice_settings, "interpolation")
         col.operator("bd.create_lattice_multi")
+        col.operator("bd.apply_lattice_interpolation")
         col.operator("bd.delete_lattice")
 
         layout.separator()

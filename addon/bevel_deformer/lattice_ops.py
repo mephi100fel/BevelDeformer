@@ -284,9 +284,52 @@ class BD_OT_delete_lattice(Operator):
         return {'FINISHED'}
 
 
+class BD_OT_apply_lattice_interpolation(Operator):
+    bl_idname = "bd.apply_lattice_interpolation"
+    bl_label = "Apply Interpolation to Selected"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.bd_lattice_settings
+        interpolation = str(settings.interpolation)
+
+        selected = list(context.selected_objects)
+        if not selected:
+            self.report({'WARNING'}, "No objects selected")
+            return {'CANCELLED'}
+
+        lattices: set[bpy.types.Object] = set()
+        for obj in selected:
+            if obj.type == 'LATTICE':
+                lattices.add(obj)
+            elif obj.type == 'MESH':
+                existing = _existing_lattice_for_mesh(obj)
+                if existing is not None:
+                    lattices.add(existing)
+
+        if not lattices:
+            self.report({'WARNING'}, "No lattices found for selected objects")
+            return {'CANCELLED'}
+
+        changed = 0
+        for lat_obj in lattices:
+            try:
+                lat_data = lat_obj.data
+                lat_data.interpolation_type_u = interpolation
+                lat_data.interpolation_type_v = interpolation
+                lat_data.interpolation_type_w = interpolation
+                changed += 1
+            except Exception as e:
+                print(f"BevelDeformer: failed to set interpolation for {getattr(lat_obj, 'name', '<unknown>')}: {e}")
+
+        self.report({'INFO'}, f"Applied interpolation to {changed} lattice(s)")
+        return {'FINISHED'}
+
+
 _classes = (
     BD_OT_create_lattice_multi,
     BD_OT_delete_lattice,
+    BD_OT_apply_lattice_interpolation,
 )
 
 
