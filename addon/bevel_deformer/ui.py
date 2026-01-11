@@ -28,6 +28,7 @@ class BD_PT_panel(Panel):
 
         col = layout.column(align=True)
         col.label(text="Deform")
+        col.prop(deform_settings, "live_preview")
         col.prop(deform_settings, "reset_to_uniform")
         col.prop(deform_settings, "shift_factor")
         col.prop(deform_settings, "scale_factor")

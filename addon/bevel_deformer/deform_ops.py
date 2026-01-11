@@ -3,6 +3,61 @@ from bpy.types import Operator
 from mathutils import Vector
 
 
+_LIVE_UPDATE_INTERVAL_SEC = 0.15
+_live_update_timer_running = False
+_live_update_pending = False
+
+
+def _apply_live_update() -> bool:
+    try:
+        scene = bpy.context.scene
+        settings = scene.bd_deform_settings
+    except Exception:
+        return False
+
+    try:
+        process_lattice_smart_scale(
+            scale_factor=float(settings.scale_factor),
+            shift_factor=float(settings.shift_factor),
+            reset_to_uniform=bool(settings.reset_to_uniform),
+        )
+    except Exception as e:
+        print(f"BevelDeformer: live update failed: {e}")
+        return False
+
+    return True
+
+
+def _live_update_timer() -> float | None:
+    global _live_update_timer_running
+    global _live_update_pending
+
+    if not _live_update_pending:
+        _live_update_timer_running = False
+        return None
+
+    _live_update_pending = False
+    _apply_live_update()
+
+    if _live_update_pending:
+        return _LIVE_UPDATE_INTERVAL_SEC
+
+    _live_update_timer_running = False
+    return None
+
+
+def schedule_live_update(context) -> None:
+    global _live_update_timer_running
+    global _live_update_pending
+
+    _live_update_pending = True
+    if _live_update_timer_running:
+        return
+
+    _live_update_timer_running = True
+    bpy.app.timers.register(_live_update_timer, first_interval=_LIVE_UPDATE_INTERVAL_SEC)
+
+
 def reset_selected_lattices_to_uniform() -> int:
     selected_lattices = [o for o in bpy.context.selected_objects if o.type == 'LATTICE']
     if not selected_lattices:

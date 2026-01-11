@@ -3,6 +3,18 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, Po
 from bpy.types import PropertyGroup
 
 
+def _schedule_live_deform_update(self, context) -> None:
+    if not getattr(self, "live_preview", False):
+        return
+
+    try:
+        from . import deform_ops
+
+        deform_ops.schedule_live_update(context)
+    except Exception as e:
+        print(f"BevelDeformer: live update scheduling failed: {e}")
+
+
 class BD_LatticeSettings(PropertyGroup):
     base_resolution: IntProperty(
         name="Base Resolution",
@@ -42,12 +54,18 @@ class BD_LatticeSettings(PropertyGroup):
 
 
 class BD_DeformSettings(PropertyGroup):
+    live_preview: BoolProperty(
+        name="Live Preview",
+        description="Automatically apply deform when changing sliders",
+        default=False,
+    )
     scale_factor: FloatProperty(
         name="Scale Factor",
         description="Multiplier applied only on axes where shift was performed",
         default=0.95,
         min=0.0,
         soft_max=2.0,
+        update=_schedule_live_deform_update,
     )
     shift_factor: FloatProperty(
         name="Shift Factor",
@@ -55,6 +73,7 @@ class BD_DeformSettings(PropertyGroup):
         default=0.5,
         min=0.0,
         max=1.0,
+        update=_schedule_live_deform_update,
     )
     reset_to_uniform: BoolProperty(
         name="Reset To Uniform",
