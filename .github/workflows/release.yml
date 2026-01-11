@@ -1,0 +1,48 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v0.1.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build add-on zip
+        shell: bash
+        run: |
+          mkdir -p dist
+          cd addon
+          zip -r "../dist/bevel_deformer_${{ steps.vars.outputs.tag }}.zip" bevel_deformer \
+            -x "**/__pycache__/**" "**/*.pyc" "**/*.pyo" "**/*.pyd" "**/.DS_Store"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ steps.vars.outputs.tag }}"
+          files: "dist/bevel_deformer_${{ steps.vars.outputs.tag }}.zip"
