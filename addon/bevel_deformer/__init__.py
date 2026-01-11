@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Bevel Deformer",
     "author": "",
-    "version": (0, 1, 5),
+    "version": (0, 1, 6),
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar > Bevel_Deform",
     "description": "Create lattices for selected meshes and apply lattice deform helpers.",

@@ -16,6 +16,11 @@ def _schedule_live_deform_update(self, context) -> None:
 
 
 class BD_LatticeSettings(PropertyGroup):
+    locked_axis_enabled: BoolProperty(
+        name="Locked Axis",
+        description="Lock one axis to a fixed low resolution (2). When disabled, resolution adapts across all axes",
+        default=True,
+    )
     base_resolution: IntProperty(
         name="Base Resolution",
         description="Resolution used for the smallest active dimension (even numbers will be used)",
@@ -25,7 +30,7 @@ class BD_LatticeSettings(PropertyGroup):
     )
     locked_axis_resolution: IntProperty(
         name="Locked Axis Resolution",
-        description="Resolution used for the axis most aligned with the chosen World Axis",
+        description="(Deprecated) Locked axis resolution. When Locked Axis is enabled, the locked axis uses 2",
         default=2,
         min=2,
         soft_max=64,
@@ -58,6 +63,7 @@ class BD_DeformSettings(PropertyGroup):
         name="Live Preview",
         description="Automatically apply deform when changing sliders",
         default=True,
+        update=_schedule_live_deform_update,
     )
     scale_factor: FloatProperty(
         name="Scale Factor",

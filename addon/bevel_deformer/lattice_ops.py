@@ -91,8 +91,8 @@ def _find_meshes_using_lattice(lat_obj: bpy.types.Object) -> list[bpy.types.Obje
 def create_lattice_multi(
     targets: list[bpy.types.Object],
     *,
+    locked_axis_enabled: bool,
     base_resolution: int,
-    locked_axis_resolution: int,
     locked_world_axis: str,
     interpolation: str,
 ) -> int:
@@ -107,7 +107,8 @@ def create_lattice_multi(
     created_lattices = []
 
     base_res = int(max(2, base_resolution))
-    locked_res = int(max(2, locked_axis_resolution))
+    locked_enabled = bool(locked_axis_enabled)
+    locked_res = 2
     if base_res % 2 == 1:
         base_res += 1
 
@@ -121,30 +122,36 @@ def create_lattice_multi(
             local_size = max_v - min_v
             local_size = Vector((_safe_dim(local_size.x), _safe_dim(local_size.y), _safe_dim(local_size.z)))
 
-            rot_mat = obj.matrix_world.to_3x3().normalized()
-            axis = str(locked_world_axis).upper()
-            world_axis_map = {
-                "X": Vector((1, 0, 0)),
-                "Y": Vector((0, 1, 0)),
-                "Z": Vector((0, 0, 1)),
-            }
-            world_axis = world_axis_map.get(axis, Vector((1, 0, 0)))
+            locked_idx: int | None = None
+            if locked_enabled:
+                rot_mat = obj.matrix_world.to_3x3().normalized()
+                axis = str(locked_world_axis).upper()
+                world_axis_map = {
+                    "X": Vector((1, 0, 0)),
+                    "Y": Vector((0, 1, 0)),
+                    "Z": Vector((0, 0, 1)),
+                }
+                world_axis = world_axis_map.get(axis, Vector((1, 0, 0)))
 
-            scores = [
-                abs(rot_mat.col[0].dot(world_axis)),
-                abs(rot_mat.col[1].dot(world_axis)),
-                abs(rot_mat.col[2].dot(world_axis)),
-            ]
-            locked_idx = scores.index(max(scores))
+                scores = [
+                    abs(rot_mat.col[0].dot(world_axis)),
+                    abs(rot_mat.col[1].dot(world_axis)),
+                    abs(rot_mat.col[2].dot(world_axis)),
+                ]
+                locked_idx = int(scores.index(max(scores)))
 
             d_list = [local_size.x, local_size.y, local_size.z]
             resolutions = [2, 2, 2]
 
-            active_dims = [d_list[i] for i in range(3) if i != locked_idx]
-            min_dim = min(active_dims) if active_dims else 1.0
+            if locked_enabled and locked_idx is not None:
+                active_dims = [d_list[i] for i in range(3) if i != locked_idx]
+                min_dim = min(active_dims) if active_dims else 1.0
+            else:
+                locked_idx = None
+                min_dim = min(d_list) if d_list else 1.0
 
             for i in range(3):
-                if i == locked_idx:
+                if locked_idx is not None and i == locked_idx:
                     resolutions[i] = locked_res
                 else:
                     dim = d_list[i]
@@ -184,6 +191,12 @@ def create_lattice_multi(
 
             lat_obj.parent = obj
             lat_obj.matrix_parent_inverse = obj.matrix_world.inverted()
+
+            # Persist per-lattice lock metadata so later operations can respect it
+            # even if scene settings change.
+            lat_obj["bd_locked_axis_enabled"] = bool(locked_enabled)
+            lat_obj["bd_locked_axis_idx"] = int(locked_idx) if locked_idx is not None else -1
+            lat_obj["bd_locked_world_axis"] = str(locked_world_axis)
 
             mod = obj.modifiers.new(name="AutoLattice", type='LATTICE')
             mod.object = lat_obj
@@ -256,8 +269,8 @@ class BD_OT_create_lattice_multi(Operator):
 
         count = create_lattice_multi(
             targets,
+            locked_axis_enabled=bool(getattr(settings, "locked_axis_enabled", True)),
             base_resolution=int(settings.base_resolution),
-            locked_axis_resolution=int(settings.locked_axis_resolution),
             locked_world_axis=str(settings.locked_world_axis),
             interpolation=str(settings.interpolation),
         )

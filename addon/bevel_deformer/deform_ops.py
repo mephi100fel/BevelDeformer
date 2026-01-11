@@ -8,6 +8,60 @@ _live_update_timer_running = False
 _live_update_pending = False
 
 
+def _gather_target_lattices(selected_objects) -> list[bpy.types.Object]:
+    lattices: set[bpy.types.Object] = set()
+    for obj in list(selected_objects or []):
+        try:
+            if obj is None:
+                continue
+            if obj.type == 'LATTICE':
+                lattices.add(obj)
+                continue
+            if obj.type != 'MESH':
+                continue
+
+            for mod in getattr(obj, "modifiers", []):
+                try:
+                    if mod.type == 'LATTICE' and mod.object is not None and mod.object.type == 'LATTICE':
+                        lattices.add(mod.object)
+                except Exception:
+                    pass
+
+            # Fallback to the addon's naming convention
+            candidate = bpy.data.objects.get(f"Lattice_{obj.name}")
+            if (
+                candidate is not None
+                and getattr(candidate, "type", None) == 'LATTICE'
+                and getattr(candidate, "parent", None) == obj
+            ):
+                lattices.add(candidate)
+        except Exception:
+            continue
+
+    return list(lattices)
+
+
+def _is_timer_registered() -> bool:
+    try:
+        is_registered = getattr(bpy.app.timers, "is_registered", None)
+        if callable(is_registered):
+            return bool(is_registered(_live_update_timer))
+    except Exception:
+        pass
+    return False
+
+
+def _ensure_timer_registered() -> bool:
+    try:
+        if _is_timer_registered():
+            return True
+        bpy.app.timers.register(_live_update_timer, first_interval=_LIVE_UPDATE_INTERVAL_SEC)
+        return True
+    except Exception as e:
+        print(f"BevelDeformer: failed to register live update timer: {e}")
+        return False
+
+
 def _shift_and_relax_line(coords: list[Vector], shift_factor: float) -> None:
     count = len(coords)
     if count < 4:
@@ -51,6 +105,34 @@ def _offset_ramp_factor(index: int, resolution: int) -> float:
     return (index - 1) / (resolution - 3)
 
 
+def _get_lattice_locked_axis(lat_obj) -> tuple[bool, int | None]:
+    try:
+        enabled = lat_obj.get("bd_locked_axis_enabled")
+        idx = lat_obj.get("bd_locked_axis_idx")
+        if enabled is not None:
+            enabled_bool = bool(enabled)
+            idx_int = int(idx) if idx is not None else -1
+            if enabled_bool and idx_int in (0, 1, 2):
+                return True, idx_int
+            return False, None
+    except Exception:
+        pass
+
+    # Backward-compat inference for lattices created before metadata existed:
+    # if exactly one axis has resolution 2 and at least one other axis > 2,
+    # assume that axis is locked.
+    try:
+        lat = lat_obj.data
+        points = [int(lat.points_u), int(lat.points_v), int(lat.points_w)]
+        candidates = [i for i, p in enumerate(points) if p == 2]
+        if len(candidates) == 1 and max(points) > 2:
+            return True, candidates[0]
+    except Exception:
+        pass
+
+    return False, None
+
+
 def _apply_live_update() -> bool:
     try:
         scene = bpy.context.scene
@@ -78,18 +160,27 @@ def _live_update_timer() -> float | None:
     global _live_update_timer_running
     global _live_update_pending
 
-    if not _live_update_pending:
+    try:
+        if not _live_update_pending:
+            _live_update_timer_running = False
+            return None
+
+        _live_update_pending = False
+        _apply_live_update()
+
+        if _live_update_pending:
+            return _LIVE_UPDATE_INTERVAL_SEC
+
         _live_update_timer_running = False
         return None
 
-    _live_update_pending = False
-    _apply_live_update()
-
-    if _live_update_pending:
-        return _LIVE_UPDATE_INTERVAL_SEC
-
-    _live_update_timer_running = False
-    return None
+    except Exception as e:
+        # If the timer callback errors, Blender silently stops calling it.
+        # Reset flags so scheduling can recover on the next property change.
+        _live_update_timer_running = False
+        _live_update_pending = False
+        print(f"BevelDeformer: live update timer crashed: {e}")
+        return None
 
 
 def schedule_live_update(context) -> None:
@@ -97,15 +188,18 @@ def schedule_live_update(context) -> None:
     global _live_update_pending
 
     _live_update_pending = True
-    if _live_update_timer_running:
+    if _live_update_timer_running and _is_timer_registered():
+        return
+
+    if not _ensure_timer_registered():
+        _live_update_timer_running = False
         return
 
     _live_update_timer_running = True
-    bpy.app.timers.register(_live_update_timer, first_interval=_LIVE_UPDATE_INTERVAL_SEC)
 
 
 def reset_selected_lattices_to_uniform() -> int:
-    selected_lattices = [o for o in bpy.context.selected_objects if o.type == 'LATTICE']
+    selected_lattices = _gather_target_lattices(bpy.context.selected_objects)
     if not selected_lattices:
         return 0
 
@@ -141,7 +235,13 @@ def process_lattice_smart_scale(
     offset_z: float,
     reset_to_uniform: bool,
 ) -> int:
-    selected_lattices = [o for o in bpy.context.selected_objects if o.type == 'LATTICE']
+    try:
+        if bpy.context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+    except Exception:
+        pass
+
+    selected_lattices = _gather_target_lattices(bpy.context.selected_objects)
     if not selected_lattices:
         return 0
 
@@ -205,6 +305,7 @@ def process_lattice_smart_scale(
             or abs(float(offset_z)) > 1e-8
         )
         if do_offset:
+            locked_enabled, locked_idx = _get_lattice_locked_axis(obj)
             fx = [_offset_ramp_factor(i, u_res) for i in range(u_res)]
             fy = [_offset_ramp_factor(i, v_res) for i in range(v_res)]
             fz = [_offset_ramp_factor(i, w_res) for i in range(w_res)]
@@ -215,6 +316,15 @@ def process_lattice_smart_scale(
                     dy = float(offset_y) * float(fy[v])
                     for u in range(u_res):
                         dx = float(offset_x) * float(fx[u])
+
+                        if locked_enabled and locked_idx is not None:
+                            if locked_idx == 0:
+                                dx = 0.0
+                            elif locked_idx == 1:
+                                dy = 0.0
+                            elif locked_idx == 2:
+                                dz = 0.0
+
                         idx = get_idx(u, v, w)
                         p = lat.points[idx].co_deform
                         lat.points[idx].co_deform = Vector((p[0] + dx, p[1] + dy, p[2] + dz))
@@ -249,7 +359,7 @@ class BD_OT_deform_selected_lattices(Operator):
         )
 
         if count == 0:
-            self.report({'WARNING'}, "No lattice objects selected")
+            self.report({'WARNING'}, "No lattices found for selected objects")
             return {'CANCELLED'}
 
         self.report({'INFO'}, f"Processed {count} lattice(s)")
@@ -278,7 +388,7 @@ class BD_OT_reset_selected_lattices(Operator):
             print(f"BevelDeformer: failed to reset UI sliders: {e}")
 
         if count == 0:
-            self.report({'WARNING'}, "No lattice objects selected (sliders reset)")
+            self.report({'WARNING'}, "No lattices found for selected objects (sliders reset)")
             return {'CANCELLED'}
 
         self.report({'INFO'}, f"Reset {count} lattice(s) to uniform")
