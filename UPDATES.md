@@ -1,16 +1,20 @@
 # Updates Log
 
-A lightweight running log of changes in this workspace.
+Changelog для аддона. Этот файл ведём как “короткий список релизов”, без старой истории.
 
-## 2025-12-31
+## 2026-01-11 — v0.1.0
 
-- Repo initialized; files organized into `assets/`, `scripts/`, `addon/`.
-- Added Blender UI controls to scripts (Scene properties + View3D Sidebar panels + operators).
-  - `scripts/Deform.py`: Deform selected lattices with sliders for scale/shift/reset.
-  - `scripts/Latice.py`: Create lattice per selected mesh with controls for base resolution, locked axis resolution, and interpolation.
-- Added `UPDATES.md` as a lightweight change log (we update it intentionally when making changes).
-- Added read-only guard: when Blender is in read-only state, scripts avoid UI registration crashes and print a helpful message.
-- Hardened `register()`/`unregister()` against read-only state to avoid crashes even if scripts are executed from embedded .blend Text blocks.
-- Improved lattice creation workflow: detects existing per-mesh lattices and asks for confirmation before overwriting.
-- Added a quick "Reset Selected Lattices" button to restore selected lattices to a uniform grid.
-- Added "Delete Lattice" button to remove lattices for selected objects.
+- Собран полноценный аддон-пакет в [addon/bevel_deformer](addon/bevel_deformer) (модульная структура вместо одного файла)
+- Добавлен логотип для отображения в настройках аддона (Preferences → Add-ons)
+- Единая панель управления: View3D → Sidebar → вкладка `Bevel`
+- Lattice:
+  - Создание lattice per-mesh + подтверждение перезаписи существующих lattice
+  - Удаление lattice для выбранных мешей/лэттисов
+  - Выбор `World Axis` (X/Y/Z) для направления, по которому определяется locked ось
+- Deform:
+  - Сброс lattice в равномерную сетку
+  - Shift + условный scale по тем осям, где был shift
+- Стабильность:
+  - Защита от read-only состояния (через обработку RuntimeError) без крашей UI
+  - Убран `select_all()` из создания lattice, чтобы не ломать выделение/контекст
+- Старые скрипты перенесены в [Legacy](Legacy) и не участвуют в установке аддона

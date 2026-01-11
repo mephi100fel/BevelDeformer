@@ -1,6 +1,5 @@
 import bpy
-from bpy.props import EnumProperty, IntProperty, PointerProperty
-from bpy.types import Operator, Panel, PropertyGroup
+from bpy.types import Operator
 from mathutils import Matrix, Vector
 
 
@@ -71,6 +70,7 @@ def create_lattice_multi(
     *,
     base_resolution: int,
     locked_axis_resolution: int,
+    locked_world_axis: str,
     interpolation: str,
 ) -> int:
     if not targets:
@@ -78,8 +78,10 @@ def create_lattice_multi(
 
     bpy.context.view_layer.update()
 
+    prev_selected = list(bpy.context.selected_objects)
+    prev_active = bpy.context.view_layer.objects.active
+
     created_lattices = []
-    bpy.ops.object.select_all(action='DESELECT')
 
     base_res = int(max(2, base_resolution))
     locked_res = int(max(2, locked_axis_resolution))
@@ -97,12 +99,18 @@ def create_lattice_multi(
             local_size = Vector((_safe_dim(local_size.x), _safe_dim(local_size.y), _safe_dim(local_size.z)))
 
             rot_mat = obj.matrix_world.to_3x3().normalized()
-            world_x = Vector((1, 0, 0))
+            axis = str(locked_world_axis).upper()
+            world_axis_map = {
+                "X": Vector((1, 0, 0)),
+                "Y": Vector((0, 1, 0)),
+                "Z": Vector((0, 0, 1)),
+            }
+            world_axis = world_axis_map.get(axis, Vector((1, 0, 0)))
 
             scores = [
-                abs(rot_mat.col[0].dot(world_x)),
-                abs(rot_mat.col[1].dot(world_x)),
-                abs(rot_mat.col[2].dot(world_x)),
+                abs(rot_mat.col[0].dot(world_axis)),
+                abs(rot_mat.col[1].dot(world_axis)),
+                abs(rot_mat.col[2].dot(world_axis)),
             ]
             locked_idx = scores.index(max(scores))
 
@@ -137,7 +145,13 @@ def create_lattice_multi(
             lat_data.interpolation_type_v = interpolation
             lat_data.interpolation_type_w = interpolation
 
-            bpy.context.collection.objects.link(lat_obj)
+            target_collection = None
+            if getattr(obj, "users_collection", None):
+                if len(obj.users_collection) > 0:
+                    target_collection = obj.users_collection[0]
+            if target_collection is None:
+                target_collection = bpy.context.collection
+            target_collection.objects.link(lat_obj)
 
             mat_trans = Matrix.Translation(local_center)
             mat_scale = Matrix.Diagonal(local_size.to_4d())
@@ -154,42 +168,35 @@ def create_lattice_multi(
             created_lattices.append(lat_obj)
 
         except Exception as e:
-            print(f"Failed for {obj.name}: {e}")
+            print(f"BevelDeformer: failed for {obj.name}: {e}")
 
     for lat in created_lattices:
         lat.select_set(True)
     if created_lattices:
         bpy.context.view_layer.objects.active = created_lattices[-1]
 
+    if created_lattices:
+        for obj in prev_selected:
+            try:
+                obj.select_set(False)
+            except Exception:
+                pass
+        for lat in created_lattices:
+            try:
+                lat.select_set(True)
+            except Exception:
+                pass
+        try:
+            bpy.context.view_layer.objects.active = created_lattices[-1]
+        except Exception:
+            pass
+    else:
+        try:
+            bpy.context.view_layer.objects.active = prev_active
+        except Exception:
+            pass
+
     return len(created_lattices)
-
-
-class BD_LatticeSettings(PropertyGroup):
-    base_resolution: IntProperty(
-        name="Base Resolution",
-        description="Resolution used for the smallest active dimension (even numbers will be used)",
-        default=6,
-        min=2,
-        soft_max=64,
-    )
-    locked_axis_resolution: IntProperty(
-        name="Locked Axis Resolution",
-        description="Resolution used for the axis most aligned with World X",
-        default=2,
-        min=2,
-        soft_max=64,
-    )
-    interpolation: EnumProperty(
-        name="Interpolation",
-        description="Lattice interpolation type",
-        items=[
-            ("KEY_LINEAR", "Linear", "Linear interpolation"),
-            ("KEY_CARDINAL", "Cardinal", "Cardinal interpolation"),
-            ("KEY_CATMULL_ROM", "Catmull-Rom", "Catmull-Rom interpolation"),
-            ("KEY_BSPLINE", "B-Spline", "B-Spline interpolation"),
-        ],
-        default="KEY_BSPLINE",
-    )
 
 
 class BD_OT_create_lattice_multi(Operator):
@@ -228,6 +235,7 @@ class BD_OT_create_lattice_multi(Operator):
             targets,
             base_resolution=int(settings.base_resolution),
             locked_axis_resolution=int(settings.locked_axis_resolution),
+            locked_world_axis=str(settings.locked_world_axis),
             interpolation=str(settings.interpolation),
         )
 
@@ -268,73 +276,25 @@ class BD_OT_delete_lattice(Operator):
                 if _delete_lattice_object(lat_obj):
                     deleted += 1
             except Exception as e:
-                print(f"Failed to delete lattice {getattr(lat_obj, 'name', '<unknown>')}: {e}")
+                print(
+                    f"BevelDeformer: failed to delete lattice {getattr(lat_obj, 'name', '<unknown>')}: {e}"
+                )
 
         self.report({'INFO'}, f"Deleted {deleted} lattice(s)")
         return {'FINISHED'}
 
 
-class BD_PT_lattice_panel(Panel):
-    bl_label = "Bevel Deformer (Lattice)"
-    bl_idname = "BD_PT_lattice_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Bevel'
-
-    def draw(self, context):
-        layout = self.layout
-        settings = context.scene.bd_lattice_settings
-
-        layout.prop(settings, "base_resolution")
-        layout.prop(settings, "locked_axis_resolution")
-        layout.prop(settings, "interpolation")
-        layout.operator(BD_OT_create_lattice_multi.bl_idname)
-        layout.separator()
-        layout.operator(BD_OT_delete_lattice.bl_idname)
-
-
 _classes = (
-    BD_LatticeSettings,
     BD_OT_create_lattice_multi,
     BD_OT_delete_lattice,
-    BD_PT_lattice_panel,
 )
 
 
-def register():
-    if getattr(bpy.app, "is_readonly", False):
-        print(
-            "BevelDeformer: Blender is running in read-only state. "
-            "UI registration is disabled. Open the .blend with a Blender version "
-            "that is the same or newer than the version that saved it (or disable read-only), "
-            "then run this script again."
-        )
-        return
+def register() -> None:
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.types.Scene.bd_lattice_settings = PointerProperty(type=BD_LatticeSettings)
 
 
-def unregister():
-    if getattr(bpy.app, "is_readonly", False):
-        return
-    if hasattr(bpy.types.Scene, "bd_lattice_settings"):
-        del bpy.types.Scene.bd_lattice_settings
+def unregister() -> None:
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
-
-
-if __name__ == "__main__":
-    if getattr(bpy.app, "is_readonly", False):
-        print(
-            "BevelDeformer: Blender is running in read-only state. "
-            "UI registration is disabled. Open the .blend with a Blender version "
-            "that is the same or newer than the version that saved it (or disable read-only), "
-            "then run this script again."
-        )
-    else:
-        try:
-            unregister()
-        except Exception:
-            pass
-        register()

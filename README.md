@@ -1,34 +1,52 @@
-# BevelDeformer
+\# BevelDeformer
 
-Small Blender playground repo for lattice-based deformation tools.
+Аддон для Blender: создаёт lattice для выбранных мешей и даёт инструменты для деформации lattice.
 
-## Layout
+## Структура проекта
 
-- `assets/Wall_Test.blend` — test scene
-- `scripts/Deform.py` — lattice point reset/shift/conditional scale
-- `scripts/Latice.py` — create a lattice per selected mesh and add a Lattice modifier
-- `addon/` — reserved for turning the scripts into a Blender add-on later
+- [addon/bevel_deformer](addon/bevel_deformer) — пакет аддона (это то, что ставится в Blender)
+	- [addon/bevel_deformer/__init__.py](addon/bevel_deformer/__init__.py) — точка входа, регистрация, логотип в Preferences
+	- [addon/bevel_deformer/lattice_ops.py](addon/bevel_deformer/lattice_ops.py) — создание/удаление lattice
+	- [addon/bevel_deformer/deform_ops.py](addon/bevel_deformer/deform_ops.py) — деформация/сброс lattice
+	- [addon/bevel_deformer/settings.py](addon/bevel_deformer/settings.py) — настройки (Scene properties)
+	- [addon/bevel_deformer/ui.py](addon/bevel_deformer/ui.py) — панель View3D
+	- [addon/bevel_deformer/icons](addon/bevel_deformer/icons) — ресурсы (логотип)
+- [Legacy](Legacy) — старые однофайловые скрипты (не используются аддоном)
 
-## How to test
+## Установка (через ZIP)
 
-1. Open `assets/Wall_Test.blend` in Blender.
-2. Go to **Scripting** workspace (or open the Text Editor).
-3. Open a script from `scripts/` and press **Run Script**.
+Важно: в корне ZIP должна лежать папка `bevel_deformer/`.
 
-Notes:
-- These scripts use `bpy`, so they must be run inside Blender.
+1) Открой папку [addon](addon)
+2) Упакуй папку `bevel_deformer` в ZIP
+3) Blender → Edit → Preferences → Add-ons → Install… → выбери ZIP → включи аддон
 
-## Troubleshooting
+Проверка: внутри ZIP должно быть `bevel_deformer/__init__.py`, `bevel_deformer/ui.py`, `bevel_deformer/icons/logo.png`.
 
-### "File written by newer Blender binary" / read-only state
+## Использование
 
-If Blender opens `assets/Wall_Test.blend` with a warning like "File written by newer Blender binary", it may switch into a read-only state.
-In that mode, Python UI class registration can fail with errors like:
+Панель: View3D → Sidebar (N) → вкладка `Bevel` → `Bevel Deformer`.
 
-- `register_class(...): can't run in readonly state ...`
+### Lattice
 
-Fix: open the scene with a Blender version that is the same or newer than the version that saved the file, then run the scripts again.
+- **Base Resolution** — базовая плотность по “активным” осям
+- **World Axis** — выбор мирового направления, по которому выбирается “locked” ось (X/Y/Z)
+- **Locked Axis Resolution** — плотность по locked оси
+- **Interpolation** — тип интерполяции lattice
+- **Create Lattice (Per Mesh)** — создаёт lattice для каждого выбранного меша (с подтверждением перезаписи)
+- **Delete Lattice** — удаляет lattice (для выбранных мешей и/или выбранных lattice)
 
-### Running the correct script version
+### Deform
 
-If your `.blend` contains embedded Text blocks with older script copies, make sure you open and run the files from the `scripts/` folder.
+- **Reset To Uniform** — сбрасывать точки lattice в равномерную сетку перед деформацией
+- **Shift Factor** — насколько сдвигать “вторые ряды” к границам
+- **Scale Factor** — масштабирование только по тем осям, где был shift
+- **Deform Selected Lattices** — применить деформацию
+- **Reset Selected Lattices** — сбросить в равномерную сетку
+
+## Примечания и диагностика
+
+- Если Blender открыл файл в read-only режиме (например, файл сохранён более новой версией Blender), регистрация UI может падать. Аддон ловит этот кейс и выводит подсказку. Обычно помогает `File → Save As…` в новый файл.
+- После обновления аддона (замены файлов) часто достаточно Disable/Enable аддона в Preferences.
+
+
